@@ -2,13 +2,14 @@ from django.contrib.auth import authenticate, login, logout
 from django.db import IntegrityError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib import messages
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
-import json
 from .models import *
 from .forms import ProfileEditForm,LoginForm,RegisterForm
+# from .utils import get_posts_dataframe, export_posts_to_csv, get_posts_as_html
 
 def index(request):
     all_posts = Post.objects.all().order_by("-date_created")
@@ -29,7 +30,6 @@ def login_view(request):
     if request.method == "POST":
         form = LoginForm(data=request.POST)
         if form.is_valid():
-            # Log the user in
             login(request, form.get_user())
             return redirect("index")
     else:
@@ -37,7 +37,7 @@ def login_view(request):
     
     context = {
         "form": form,
-        "title": "Log in to Network",
+        "title": "Log in to Trendy",
         "button_label": "Log In",
         "show_signup_link": True,
     }
@@ -58,7 +58,7 @@ def register(request):
         form = RegisterForm()
     context = {
         "form": form,
-        "title": "Sign up for Network",
+        "title": "Sign up for Trendy",
         "button_label": "Sign Up",
         "show_login_link": True,
     }
@@ -133,19 +133,6 @@ def following(request):
     else:
         return HttpResponseRedirect(reverse("login"))
 
-def saved(request):
-    if request.user.is_authenticated:
-        all_posts = Post.objects.filter(savers=request.user).order_by("-date_created")
-        paginator = Paginator(all_posts, 10)
-        page_number = request.GET.get("page")
-        if page_number == None:
-            page_number = 1
-        posts = paginator.get_page(page_number)
-        followings = Follower.objects.filter(followers=request.user).values_list("user", flat=True)
-        suggestions = (User.objects.exclude(pk__in=followings).exclude(username=request.user.username).order_by("?")[:6])
-        return render(request,"network/index.html",{"posts": posts, "suggestions": suggestions, "page": "saved"},)
-    else:
-        return HttpResponseRedirect(reverse("login"))
 
 @login_required
 def create_post(request):
@@ -161,74 +148,15 @@ def create_post(request):
         return HttpResponse("Method must be 'POST'")
 
 @login_required
-
-@csrf_exempt
-def like_post(request, id):
-    if request.user.is_authenticated:
-        if request.method == "PUT":
-            post = Post.objects.get(pk=id)
-            print(post)
-            try:
-                post.likers.add(request.user)
-                post.save()
-                return HttpResponse(status=204)
-            except Exception as e:
-                return HttpResponse(e)
+def toggle_like(request, id):
+    post = get_object_or_404(Post, id=id)
+    if request.method == "POST":
+        if request.user in post.likers.all():
+            post.likers.remove(request.user)
         else:
-            return HttpResponse("Method must be 'PUT'")
-    else:
-        return HttpResponseRedirect(reverse("login"))
-
-@csrf_exempt
-def unlike_post(request, id):
-    if request.user.is_authenticated:
-        if request.method == "PUT":
-            post = Post.objects.get(pk=id)
-            print(post)
-            try:
-                post.likers.remove(request.user)
-                post.save()
-                return HttpResponse(status=204)
-            except Exception as e:
-                return HttpResponse(e)
-        else:
-            return HttpResponse("Method must be 'PUT'")
-    else:
-        return HttpResponseRedirect(reverse("login"))
-
-@csrf_exempt
-def save_post(request, id):
-    if request.user.is_authenticated:
-        if request.method == "PUT":
-            post = Post.objects.get(pk=id)
-            print(post)
-            try:
-                post.savers.add(request.user)
-                post.save()
-                return HttpResponse(status=204)
-            except Exception as e:
-                return HttpResponse(e)
-        else:
-            return HttpResponse("Method must be 'PUT'")
-    else:
-        return HttpResponseRedirect(reverse("login"))
-
-@csrf_exempt
-def unsave_post(request, id):
-    if request.user.is_authenticated:
-        if request.method == "PUT":
-            post = Post.objects.get(pk=id)
-            print(post)
-            try:
-                post.savers.remove(request.user)
-                post.save()
-                return HttpResponse(status=204)
-            except Exception as e:
-                return HttpResponse(e)
-        else:
-            return HttpResponse("Method must be 'PUT'")
-    else:
-        return HttpResponseRedirect(reverse("login"))
+            post.likers.add(request.user)
+        post.save()
+    return redirect(request.META.get('HTTP_REFERER', '/'))
 
 @csrf_exempt
 def follow(request, username):
@@ -249,27 +177,27 @@ def follow(request, username):
     else:
         return HttpResponseRedirect(reverse("login"))
     
+
 @csrf_exempt
 def comment(request, post_id):
+    post = Post.objects.get(id=post_id)
     if request.user.is_authenticated:
         if request.method == "POST":
-            data = json.loads(request.body)
-            comment = data.get("comment_text")
-            post = Post.objects.get(id=post_id)
-            try:
-                newcomment = Comment.objects.create(post=post, commenter=request.user, comment_content=comment)
-                post.comment_count += 1
-                post.save()
-                print(newcomment.serialize())
-                return JsonResponse([newcomment.serialize()], safe=False, status=201)
-            except Exception as e:
-                return HttpResponse(e)
-        post = Post.objects.get(id=post_id)
-        comments = Comment.objects.filter(post=post)
-        comments = comments.order_by("-comment_time").all()
-        return JsonResponse([comment.serialize() for comment in comments], safe=False)
+            comment_text = request.POST.get("comment_text")
+            if comment_text:
+                try:
+                    new_comment = Comment.objects.create(post=post, commenter=request.user, comment_content=comment_text)
+                    post.comment_count += 1
+                    post.save()
+                    comments = Comment.objects.filter(post=post).order_by('-comment_time')
+                    return redirect("index")
+                except Exception as e:
+                    return HttpResponse(str(e), status=500)
+        comments = Comment.objects.filter(post=post).order_by('-comment_time')
+        return render(request, "network/index.html", {'post': post, 'comments': comments})
     else:
         return HttpResponseRedirect(reverse("login"))
+
 
 @csrf_exempt
 def delete_post(request, post_id):
@@ -289,13 +217,23 @@ def delete_post(request, post_id):
     else:
         return HttpResponse(status=401) 
 
-# def followers_list(request, username):
-#     profile_user = get_object_or_404(User, username=username)
-#     followers = Follower.objects.get(user=profile_user).followers.all() 
-#     return render(request,"network/followers.html",{"profile_user": profile_user,"followers": followers,})
 
-# def following_list(request, username):
-#     profile_user = get_object_or_404(User, username=username)
-#     following_users = Follower.objects.filter(followers=profile_user).values_list("user", flat=True)
-#     following = User.objects.filter(id__in=following_users)
-#     return render(request,"network/following.html",{"profile_user": profile_user,"following": following,},)
+def user_activity_chart(request):
+    users = User.objects.all()
+    user_data = []
+    for user in users:
+        post_count = Post.objects.filter(creater=user).count()
+        follower_count = Follower.objects.filter(user=user).count()
+        comment_count = Comment.objects.filter(commenter=user).count()
+
+        user_data.append({
+            "username": user.username,
+            "posts": post_count,
+            "followers": follower_count,
+            "comments": comment_count,
+        })
+
+    context = {
+        'user_data': user_data
+    }
+    return render(request, 'network/user_activity_chart.html', context)

@@ -1,0 +1,74 @@
+{% extends "network/layout.html" %}
+
+{% block body %}
+    <div class="container">
+        <h1 class="text-center my-5">User Activity Chart</h1>
+        <div class="chart-container">
+            <div class="chart-box">
+                <canvas id="userActivityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('userActivityChart').getContext('2d');
+        const userData = {{ user_data | safe }};  
+
+        const labels = userData.map(user => user.username);
+        const postsData = userData.map(user => user.posts);
+        const followersData = userData.map(user => user.followers);
+        const commentsData = userData.map(user => user.comments);
+
+        const data = {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Posts',
+                    data: postsData,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    fill: true
+                },
+                {
+                    label: 'Followers',
+                    data: followersData,
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    fill: true
+                },
+                {
+                    label: 'Comments',
+                    data: commentsData,
+                    borderColor: 'rgb(153, 102, 255)',
+                    backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                    fill: true
+                }
+            ]
+        };
+
+        const config = {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'User Activity by Posts, Followers, and Comments'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                }
+            }
+        };
+
+        const userActivityChart = new Chart(ctx, config);
+    </script>
+{% endblock %}

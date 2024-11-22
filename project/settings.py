@@ -13,6 +13,7 @@ ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 
 INSTALLED_APPS = [
+    'widget_tweaks',
     'network',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -107,6 +108,6 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'network/media')
 MEDIA_URL = '/media/'
 
-SESSION_COOKIE_AGE = 0.5 * 60
+SESSION_COOKIE_AGE = 5 * 60
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_SECURE = True
